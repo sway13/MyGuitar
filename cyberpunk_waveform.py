@@ -12,7 +12,8 @@ CHANNELS = 1
 RATE = 44100
 CHUNK = 1024
 WINDOW_SIZE = 12  # Number of chunks to display in the window
-AMPLITUDE_MULTIPLIER = 4.0  # Increased amplitude for better visibility
+AMPLITUDE_MULTIPLIER = 100.0  # Extreme amplitude boost for 1000 dB-like effect
+MAX_DISPLAY_VALUE = 35000 * 10  # Cap display values to prevent overflow
 
 # Create a custom calming color scheme
 def create_calm_colormap():
@@ -20,7 +21,7 @@ def create_calm_colormap():
     colors = [(0, 0.1, 0.2), (0, 0.3, 0.5), (0, 0.5, 0.7), (0.1, 0.6, 0.5), (0.2, 0.7, 0.4)]
     return mpl.colors.LinearSegmentedColormap.from_list("calm", colors)
 
-class CalmingWaveform:
+class UltraAmplifiedWaveform:
     def __init__(self):
         self.p = pyaudio.PyAudio()
         self.stream = self.p.open(
@@ -34,8 +35,8 @@ class CalmingWaveform:
         # Set the style to dark background
         plt.style.use('dark_background')
         
-        # Create figure and configure it for calming style
-        self.fig = plt.figure(figsize=(12, 8), facecolor='#001020')
+        # Create figure and configure it for ultra-amplified style
+        self.fig = plt.figure(figsize=(14, 9), facecolor='#001020')
         self.ax = self.fig.add_subplot(1, 1, 1)
         
         # Set a deep ocean blue background
@@ -46,35 +47,44 @@ class CalmingWaveform:
         self.buffer = np.zeros(CHUNK * WINDOW_SIZE)
         
         # Create a line for waveform with calming color
-        self.line, = self.ax.plot([], [], lw=2.5, color='#00c8aa')
+        self.line, = self.ax.plot([], [], lw=3.0, color='#00c8aa')
         
         # Configure grid with subtle accents
         self.ax.grid(True, linestyle='-', alpha=0.2, color='#007070')
         
-        # Configure axes
+        # Configure axes - with extreme range to handle 1000 dB effect
         self.ax.set_xlim(0, len(self.buffer))
-        self.ax.set_ylim(-35000 * AMPLITUDE_MULTIPLIER, 35000 * AMPLITUDE_MULTIPLIER)
+        self.ax.set_ylim(-MAX_DISPLAY_VALUE, MAX_DISPLAY_VALUE)
         
-        # Style the title and labels with calming colors
-        self.ax.set_title('OCEAN WAVE AUDIO VISUALIZATION', 
-                        fontsize=24, color='#00c8aa', 
+        # Style the title and labels with calming colors but highlight extreme amplitude
+        self.ax.set_title('1K DB OCEAN AMPLIFIER', 
+                        fontsize=28, color='#00e8c0', 
                         fontweight='bold', fontname='Verdana')
         
         self.ax.set_xlabel('TIME FLOW', 
                          fontsize=14, color='#20a0a0', 
                          fontname='Verdana')
         
-        self.ax.set_ylabel('WAVE AMPLITUDE', 
-                         fontsize=14, color='#00c8aa', 
+        self.ax.set_ylabel('ULTRA AMPLITUDE (1K DB)', 
+                         fontsize=16, color='#00e8c0', 
                          fontname='Verdana')
         
         # Remove tick labels for cleaner look but keep the ticks
         self.ax.set_xticklabels([])
         self.ax.tick_params(axis='both', colors='#00a0a0', labelsize=10)
         
-        # Add gentle horizontal lines for calming effect
-        self.ax.axhline(y=34000 * AMPLITUDE_MULTIPLIER, color='#004060', linestyle='-', alpha=0.4, lw=2)
-        self.ax.axhline(y=-34000 * AMPLITUDE_MULTIPLIER, color='#004060', linestyle='-', alpha=0.4, lw=2)
+        # Add horizontal indicator lines showing the normal range vs ultra-amplified range
+        # Normal range at 32768 (16-bit audio)
+        self.ax.axhline(y=32768, color='#20a0a0', linestyle='--', alpha=0.4, lw=1.5)
+        self.ax.axhline(y=-32768, color='#20a0a0', linestyle='--', alpha=0.4, lw=1.5)
+        
+        # Add text indicators for the normal range vs amplified range
+        self.ax.text(len(self.buffer)*0.02, 40000, 'NORMAL RANGE', 
+                    color='#20a0a0', fontsize=10, alpha=0.7)
+        
+        # Add gentle horizontal lines for calming effect at the extreme bounds
+        self.ax.axhline(y=MAX_DISPLAY_VALUE*0.95, color='#00e8c0', linestyle='-', alpha=0.5, lw=2)
+        self.ax.axhline(y=-MAX_DISPLAY_VALUE*0.95, color='#00e8c0', linestyle='-', alpha=0.5, lw=2)
         
         # Create animation
         self.ani = FuncAnimation(
@@ -88,26 +98,39 @@ class CalmingWaveform:
         # Add subtle vertical grid lines
         for x in range(0, CHUNK * WINDOW_SIZE, CHUNK):
             self.ax.axvline(x=x, color='#006060', linestyle='-', alpha=0.15, lw=1)
+            
+        # Add water ripple effect at the bottom of the plot for visual effect
+        ripple_x = np.linspace(0, len(self.buffer), 200)
+        ripple_y = np.zeros(200) - MAX_DISPLAY_VALUE * 0.9
+        self.ripple_line, = self.ax.plot(ripple_x, ripple_y, color='#00a0e0', alpha=0.3, lw=2)
+        self.ripple_phase = 0
     
     def update(self, frame):
         # Read audio data
         data = self.stream.read(CHUNK, exception_on_overflow=False)
         audio_data = np.frombuffer(data, dtype=np.int16)
         
-        # Amplify the signal
+        # Get pre-amplified max for color decisions
+        pre_max = np.max(np.abs(audio_data))
+        pre_norm = pre_max / 32768  # Normalize to 0-1 range based on original signal
+        
+        # Amplify the signal with extreme multiplier
         audio_data = audio_data * AMPLITUDE_MULTIPLIER
         
-        # Add dynamic color based on amplitude but keep it within calming palette
-        max_amp = np.max(np.abs(audio_data))
-        norm_amp = max_amp / (32768 * AMPLITUDE_MULTIPLIER)  # Normalize to 0-1 range
+        # Clip extremely high values to prevent overflow in display
+        audio_data = np.clip(audio_data, -MAX_DISPLAY_VALUE, MAX_DISPLAY_VALUE)
         
         # Change line color dynamically but stay within calm colors
-        if norm_amp > 0.7:  # High amplitude - turquoise
-            self.line.set_color('#00e8c0')
-        elif norm_amp > 0.4:  # Medium amplitude - teal
-            self.line.set_color('#00c8aa')
+        # Use the pre-amplified value for smoother color transitions
+        if pre_norm > 0.7:  # High amplitude - bright turquoise
+            self.line.set_color('#00fff0')
+            self.line.set_linewidth(4.0)  # Thicker line for high amplitude
+        elif pre_norm > 0.4:  # Medium amplitude - teal
+            self.line.set_color('#00d8c0')
+            self.line.set_linewidth(3.0)
         else:  # Low amplitude - blue
             self.line.set_color('#0090a0')
+            self.line.set_linewidth(2.5)
         
         # Shift buffer and add new data
         self.buffer = np.roll(self.buffer, -len(audio_data))
@@ -116,14 +139,22 @@ class CalmingWaveform:
         # Update the line
         self.line.set_data(range(len(self.buffer)), self.buffer)
         
+        # Update ripple effect at the bottom
+        self.ripple_phase += 0.1
+        ripple_x = np.linspace(0, len(self.buffer), 200)
+        # Make the ripple amplitude responsive to audio
+        ripple_amp = 5000 + pre_norm * 15000
+        ripple_y = np.sin(ripple_x/1000 + self.ripple_phase) * ripple_amp - MAX_DISPLAY_VALUE * 0.9
+        self.ripple_line.set_ydata(ripple_y)
+        
         # Gentle background pulsing based on volume
-        if norm_amp > 0.6:
+        if pre_norm > 0.6:
             # Subtle pulse effect on louder sounds
-            self.ax.set_facecolor('#002850')  # Slightly lighter blue
+            self.ax.set_facecolor('#003060')  # More vibrant blue for high amplitude
         else:
             self.ax.set_facecolor('#002040')  # Back to deeper blue
         
-        return [self.line]
+        return [self.line, self.ripple_line]
     
     def start(self):
         plt.tight_layout()
@@ -137,22 +168,22 @@ class CalmingWaveform:
 
 if __name__ == "__main__":
     print("""
-    ╔═══════════════════════════════════════════╗
-    ║ OCEAN WAVE AUDIO VISUALIZER               ║
-    ║ A calming audio experience                ║
-    ╚═══════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════════════╗
+    ║ 1K DB ULTRA-AMPLIFIED OCEAN WAVE VISUALIZER       ║
+    ║ Experience the depths of sound at 1000 decibels    ║
+    ╚═══════════════════════════════════════════════════╝
     """)
-    print("Initializing calming wave interface...")
+    print("Initializing ultra-amplified ocean interface...")
     print("Press Ctrl+C in terminal or close window to exit")
     
     try:
-        waveform = CalmingWaveform()
+        waveform = UltraAmplifiedWaveform()
         waveform.start()
     except KeyboardInterrupt:
-        print("Closing the ocean...")
+        print("Closing the amplified ocean...")
     except Exception as e:
         print(f"Wave error: {e}")
     finally:
         if 'waveform' in locals():
             waveform.stop()
-        print("Ocean waves have calmed.") 
+        print("The ocean has returned to normal amplitude.") 
