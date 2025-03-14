@@ -86,6 +86,12 @@ class UltraAmplifiedWaveform:
         self.ax.axhline(y=MAX_DISPLAY_VALUE*0.95, color='#00e8c0', linestyle='-', alpha=0.5, lw=2)
         self.ax.axhline(y=-MAX_DISPLAY_VALUE*0.95, color='#00e8c0', linestyle='-', alpha=0.5, lw=2)
         
+        # Add water ripple effect at the bottom of the plot for visual effect
+        ripple_x = np.linspace(0, len(self.buffer), 200)
+        ripple_y = np.sin(ripple_x/1000) * 5000 - MAX_DISPLAY_VALUE * 0.9
+        self.ripple_line, = self.ax.plot(ripple_x, ripple_y, color='#00a0e0', alpha=0.3, lw=2)
+        self.ripple_phase = 0
+        
         # Create animation
         self.ani = FuncAnimation(
             self.fig, 
@@ -98,12 +104,6 @@ class UltraAmplifiedWaveform:
         # Add subtle vertical grid lines
         for x in range(0, CHUNK * WINDOW_SIZE, CHUNK):
             self.ax.axvline(x=x, color='#006060', linestyle='-', alpha=0.15, lw=1)
-            
-        # Add water ripple effect at the bottom of the plot for visual effect
-        ripple_x = np.linspace(0, len(self.buffer), 200)
-        ripple_y = np.zeros(200) - MAX_DISPLAY_VALUE * 0.9
-        self.ripple_line, = self.ax.plot(ripple_x, ripple_y, color='#00a0e0', alpha=0.3, lw=2)
-        self.ripple_phase = 0
     
     def update(self, frame):
         # Read audio data
